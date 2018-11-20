@@ -14,25 +14,22 @@ RE_MENTION = r'@([a-zA-Z0-9_]+|[\u0621-\u064A\u0660-\u0669\uFE70-\uFEFF0-9_]+)'
 RE_URL = r'(?:https?://|www\.)(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
 RE_EMAIL = r'\b[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+\b'
 RE_HTML = r'<.*?>'
-RE_SPECIAL_SYMBOL = r'[^\u0600-\u06FF]+'
+RE_NON_ARABIC = r'[^\u0627-\u064a]'
 
-TOKENS = [
+TWITTER = [
+    RE_HASHTAG,
+    RE_MENTION
+]
+
+WEB = [
     RE_URL,
     RE_EMAIL,
-    RE_HASHTAG,
-    RE_MENTION,
-    RE_NUM,
     RE_HTML,
-    RE_SPECIAL_SYMBOL
 ]
 
 IGNORED = [
     RE_WHITESPACE
 ]
-
-RE_PATTERN = re.compile(r'|'.join(IGNORED) +
-                        r'|(' + r'|'.join(TOKENS) + r')', re.UNICODE)
-
 
 LONGATION = re.compile(r'(.)\1+')
 TASHKEEL = re.compile(r'[\u0617-\u061A\u064B-\u0652]')
@@ -52,9 +49,16 @@ def remove_extra_spaces(text: str) -> str:
     )
 
 
-def _preprocess_text(text, remove_punct: bool = False) -> str:
+def _preprocess_arabic_text(text,  # pylint: disable=too-many-arguments
+                            remove_non_arabic: bool = False,
+                            remove_punctuation: bool = False,
+                            remove_numbers: bool = False,
+                            remove_emails_urls_html: bool = False,
+                            remove_hashtags_mentions: bool = False) -> str:
     """
     Provide a Modified version of https://github.com/bakrianoo/aravec .
+
+    This function removes non-arabic characters, urls, emails, twitter hashtags and mentions among other things.
 
     :param text: text to preprocess.
     :returns: preprocessed text.
@@ -76,7 +80,7 @@ def _preprocess_text(text, remove_punct: bool = False) -> str:
         ("'", ''),
         ('ى', 'ي'),
         ('\\', ''),
-        ('\r', ''),
+        ('\r', ' '),
         ('\n', ' '),
         ('\t', ' '),
         ('&quot;', ' '),
@@ -85,7 +89,24 @@ def _preprocess_text(text, remove_punct: bool = False) -> str:
         ('!', ' ! '),
     ]
 
-    text = re.sub(RE_PATTERN, ' ', text)
+    expressions = []
+
+    if remove_non_arabic:
+        expressions.append(RE_NON_ARABIC)
+
+    if remove_numbers:
+        expressions.append(RE_NUM)
+
+    if remove_emails_urls_html:
+        expressions.extend(WEB)
+
+    if remove_hashtags_mentions:
+        expressions.extend(TWITTER)
+
+    if expressions:
+        re_pattern = r'|'.join(IGNORED) + r'|(' + r'|'.join(expressions) + r')'  # type: ignore
+        text = re.sub(re_pattern, ' ', text)
+
     text = re.sub(TASHKEEL, '', text)
     text = re.sub(LONGATION, r'\1\1', text)
     text = text.replace('وو', 'و')
@@ -95,13 +116,13 @@ def _preprocess_text(text, remove_punct: bool = False) -> str:
     for token, replacement in template:
         text = text.replace(token, replacement)
 
-    if remove_punct:
+    if remove_punctuation:
         text = text.translate(TRANSLATE_TABLE)
 
     return remove_extra_spaces(text)
 
 
-def preprorcess_text(remove_punct: bool):
+def preprorcess_arabic_text(remove_punct: bool):
     """Preprocess text."""
     @wrapt.decorator
     def wrapper(wrapped, instance, args, kwargs):  # pylint: disable=unused-argument
@@ -109,7 +130,7 @@ def preprorcess_text(remove_punct: bool):
             if not isinstance(args[0], str):
                 raise TypeError
 
-            text = _preprocess_text(args[0], remove_punct=remove_punct)
+            text = _preprocess_arabic_text(args[0], remove_punctuation=remove_punct)
 
         except (IndexError, TypeError):
             raise TypeError('text must be a string!')
