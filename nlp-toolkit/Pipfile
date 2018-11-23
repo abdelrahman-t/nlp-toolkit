@@ -14,10 +14,10 @@ fuzzywuzzy = {version = "*", extras = ["speedup"]}
 "flake8" = "*"
 pylint = "*"
 rope = "*"
-prospector = "*"
+# prospector = "*"
 mypy = "*"
 pylama = "*"
-jupyter = "*"
+# jupyter = "*"
 
 [requires]
 python_version = "3.6"
