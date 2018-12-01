@@ -8,6 +8,8 @@ name = "pypi"
 pyfunctional = "*"
 wrapt = "*"
 fuzzywuzzy = {version = "*", extras = ["speedup"]}
+gensim = "*"
+sklearn = "*"
 
 [dev-packages]
 "autopep8" = "*"

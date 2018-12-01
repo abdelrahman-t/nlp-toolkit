@@ -122,7 +122,7 @@ def _preprocess_arabic_text(text,  # pylint: disable=too-many-arguments
     return remove_extra_spaces(text)
 
 
-def preprorcess_arabic_text(remove_punct: bool):
+def preprorcess_arabic_text(**kwargs):
     """Preprocess text."""
     @wrapt.decorator
     def wrapper(wrapped, instance, args, kwargs):  # pylint: disable=unused-argument
@@ -130,7 +130,7 @@ def preprorcess_arabic_text(remove_punct: bool):
             if not isinstance(args[0], str):
                 raise TypeError
 
-            text = _preprocess_arabic_text(args[0], remove_punctuation=remove_punct)
+            text = _preprocess_arabic_text(args[0], **kwargs)
 
         except (IndexError, TypeError):
             raise TypeError('text must be a string!')

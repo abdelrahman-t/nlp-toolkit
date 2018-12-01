@@ -22,8 +22,8 @@ LOGGER = utils.setup_logger('farasa', logging.INFO)
 
 FILE_PATH = os.path.dirname(__file__)
 FARASA_JARS = [
-    os.path.join(FILE_PATH, 'Farasa/NER/NER.jar'),
-    os.path.join(FILE_PATH, 'Farasa/POS/POS.jar'),
+    os.path.join(FILE_PATH, '../dependencies/farasa/NER/NER.jar'),
+    os.path.join(FILE_PATH, '../dependencies/farasa/POS/POS.jar'),
 ]
 
 CACHE_SIZE = 100
@@ -42,6 +42,7 @@ class Farasa:
 
     Supports Farasa Segmenter, POS and NER taggers.
     """
+
     SEGMENT_TYPES = ['S', 'E',
                      'V', 'NOUN', 'PRON', 'ADJ', 'NUM',
                      'CONJ', 'PART', 'NSUFF', 'CASE', 'FOREIGN',
@@ -60,7 +61,7 @@ class Farasa:
         self.pos_tagger = base.pos.FarasaPOSTagger(self.segmenter)
         self.ner = base.ner.ArabicNER(self.segmenter, self.pos_tagger)
 
-    @preprorcess_arabic_text(remove_punct=False)
+    @preprorcess_arabic_text()
     def tag_pos(self, text: str) -> List[Tuple[str, str]]:
         """
         Tag part of speech.
@@ -81,7 +82,7 @@ class Farasa:
 
     def filter_pos(self, text: str, keep: List[str]) -> str:
         """
-        Filter parts of speech
+        Filter parts of speech.
 
         :param text: text to process.
         :param keep: list of parts of speech to keep.
@@ -98,7 +99,7 @@ class Farasa:
                         .to_list()
                         )
 
-    @preprorcess_arabic_text(remove_punct=False)
+    @preprorcess_arabic_text()
     def segment(self, text: str) -> List[str]:
         """
         Segment piece of text.
@@ -109,7 +110,7 @@ class Farasa:
         """
         return self.segmenter.segmentLine(text)
 
-    @preprorcess_arabic_text(remove_punct=False)
+    @preprorcess_arabic_text()
     def get_named_entities(self, text: str) -> List[Tuple[str, str]]:
         """
         Get named entities.
@@ -149,6 +150,8 @@ class Farasa:
     @staticmethod
     def __launch_java_gateway() -> JavaGateway:
         """Launch java gateway."""
+        LOGGER.info('Initializing Farasa..')
+
         port = launch_gateway(classpath=CLASS_PATH, die_on_exit=True)
         params = GatewayParameters(
             port=port, auto_convert=True, auto_field=True, eager_load=True
