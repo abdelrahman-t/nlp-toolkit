@@ -14,7 +14,7 @@ RE_MENTION = r'@([a-zA-Z0-9_]+|[\u0621-\u064A\u0660-\u0669\uFE70-\uFEFF0-9_]+)'
 RE_URL = r'(?:https?://|www\.)(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
 RE_EMAIL = r'\b[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+\b'
 RE_HTML = r'<.*?>'
-RE_NON_ARABIC = r'[^\u0627-\u064a]'
+RE_NON_ARABIC = r'[^\u0600-\u06FF]'
 
 TWITTER = [
     RE_HASHTAG,
