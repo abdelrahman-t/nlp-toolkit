@@ -6,13 +6,11 @@ Paper can be found at http://www.aclweb.org/anthology/N16-3003
 """
 import logging
 import os.path
-from functools import partial
 from collections import defaultdict
 from operator import itemgetter
-from typing import List, Tuple, Dict
+from typing import Dict, List, Tuple
 
 from functional import seq
-from fuzzywuzzy import process
 from py4j.java_gateway import GatewayParameters, JavaGateway, launch_gateway
 
 import utils
@@ -90,13 +88,9 @@ class Farasa:
         :returns: filtered text.
         """
         pos = self.tag_pos(text)
-        get_match = partial(process.extractOne, choices=text.split())
-
         return ' '.join(seq(pos)
                         .filter(lambda x: x[1] in keep and '+' not in x[1])
                         .map(itemgetter(0))
-                        .map(lambda word: get_match(word)[0])
-                        .to_list()
                         )
 
     @preprorcess_arabic_text()
@@ -158,3 +152,6 @@ class Farasa:
         )
 
         return JavaGateway(gateway_parameters=params)
+
+
+Farasa().filter_pos('Egypt', ['NOUN'])
