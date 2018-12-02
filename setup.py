@@ -11,5 +11,5 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     python_requires='>=3.6.0',
-    install_requires=['py4j', 'fuzzywuzzy', 'python-levenshtein>=0.12', 'pyfunctional', 'wrapt'],
+    install_requires=['py4j', 'fuzzywuzzy', 'python-levenshtein>=0.12', 'pyfunctional', 'wrapt', 'tqdm'],
 )

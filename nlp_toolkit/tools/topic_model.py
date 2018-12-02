@@ -8,8 +8,8 @@ from functional import seq
 from sklearn.feature_extraction.text import TfidfVectorizer
 from tqdm import tqdm
 
-import tools.farasa
-from utils import _preprocess_arabic_text, setup_logger
+from .utils import _preprocess_arabic_text, setup_logger
+from .farasa import Farasa
 
 LOGGER = setup_logger('topic-models', logging.DEBUG)
 
@@ -56,7 +56,7 @@ class TopicModel:
         Ran only one.
         """
         global farasa
-        farasa = tools.farasa.Farasa()
+        farasa = Farasa()
 
     def preprocess_document(self, document: str) -> str:
         """
@@ -181,6 +181,3 @@ class CategoryModel:
             progress.update()
 
         self.vectorizer = self.vectorizer.fit(_X, _y)
-
-
-TopicModel(pos_to_use=['NOUN'], num_workers=2).fit(['مصر مصدر الخراء فى الكون', 'there is no hope مصر', 'blalalala'])

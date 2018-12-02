@@ -1,1 +1,1 @@
-recursive-include dependencies/nlp-toolkit/Farasa/ *
+recursive-include nlp_toolkit/dependencies/farasa/ *

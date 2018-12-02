@@ -13,10 +13,9 @@ from typing import Dict, List, Tuple
 from functional import seq
 from py4j.java_gateway import GatewayParameters, JavaGateway, launch_gateway
 
-import utils
-from utils import preprorcess_arabic_text
+from .utils import preprorcess_arabic_text, setup_logger
 
-LOGGER = utils.setup_logger('farasa', logging.INFO)
+LOGGER = setup_logger('farasa', logging.INFO)
 
 FILE_PATH = os.path.dirname(__file__)
 FARASA_JARS = [
@@ -152,6 +151,3 @@ class Farasa:
         )
 
         return JavaGateway(gateway_parameters=params)
-
-
-Farasa().filter_pos('Egypt', ['NOUN'])
