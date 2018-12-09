@@ -1,8 +1,8 @@
 """Setup module."""
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 setup(
-    name='ar-nlp-toolkit',
+    name='nlp-toolkit',
     version='0.0.1',
     url='https://github.com/abdelrahman-t/nlp-toolkit',
     author='Abdelrahman Talaat',
