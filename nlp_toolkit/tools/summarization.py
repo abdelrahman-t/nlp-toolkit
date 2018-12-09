@@ -30,8 +30,4 @@ def summarize(text, ratio) -> str:
 def extract_keywords(text: str, pos_filter: List[str]) -> List[str]:
     """Extract list of keywords from text."""
     text = _preprocess_arabic_text(text, remove_emails_urls_html=True)
-
-    return keywords(
-        farasa.filter_pos(text, keep=pos_filter),
-        split=True, words=True
-    )
+    return keywords(farasa.filter_pos(text, keep=pos_filter), split=True)
