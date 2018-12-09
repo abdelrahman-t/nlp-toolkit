@@ -11,6 +11,8 @@ fuzzywuzzy = {version = "*", extras = ["speedup"]}
 gensim = "*"
 sklearn = "*"
 tqdm = "*"
+nltk = "*"
+summa = "*"
 
 [dev-packages]
 "autopep8" = "*"
