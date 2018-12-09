@@ -206,11 +206,13 @@ class TopicModel:
 
         self.topics = self._lda_model.print_topics(num_topics=num_topics, num_words=100)
 
-    def predict(self, document, topics_map: Dict[int, str]) -> List[str]:
+    def predict(self, document, topics_map: Dict[int, str], num_topics: int) -> List[str]:
         """
         Predict topics distribution for a document.
 
         :params document: document to predict topics for.
+        :params topics_map: a mapping of topic number to topic name.
+        :params num_topics: return the top num_topics.
         :returns: a list of topic numbers sorted by their probabilities.
         """
         tokens = (seq([document])
@@ -225,6 +227,7 @@ class TopicModel:
             seq(self._lda_model[tokens][0])
             .sorted(key=lambda x: -x[1])
             .map(get(0))
+            .take(num_topics)
         )
 
         if topics_map:
