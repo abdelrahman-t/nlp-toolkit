@@ -218,6 +218,7 @@ class TopicModel:
                   .map(self.tokenize)
                   .map(self.create_trigrams)
                   .flat_map(self.id2word.doc2bow)
+                  .to_list()
                   )
 
         topics = (
