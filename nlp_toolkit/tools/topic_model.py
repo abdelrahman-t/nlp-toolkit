@@ -1,15 +1,21 @@
 """Topic modeling."""
 import logging
 from collections import Counter
+from operator import itemgetter as get
 from multiprocessing import Pool
-from typing import List, Sequence, Union, Generator, Tuple, Any
+from typing import Any, Dict, Generator, List, Sequence, Set, Tuple, Union, Optional
 
+import nltk
 from functional import seq
+from gensim.corpora.dictionary import Dictionary
+from gensim.models import LdaMulticore, Phrases
+from gensim.models.phrases import Phraser
+from nltk import word_tokenize
 from sklearn.feature_extraction.text import TfidfVectorizer
 from tqdm import tqdm
 
-from .utils import _preprocess_arabic_text, setup_logger
 from .farasa import Farasa
+from .utils import _preprocess_arabic_text, setup_logger
 
 LOGGER = setup_logger('topic-models', logging.DEBUG)
 
@@ -21,7 +27,7 @@ class TopicModel:
     Filtering parts of speech is currently done using tools.Farasa.
     """
 
-    def __init__(self, pos_to_use: Sequence[str], min_df: Union[int, float] = 5,
+    def __init__(self, pos_to_use: Sequence[str], stop_words: Set[str], min_df: Union[int, float] = 5,
                  max_df: Union[int, float] = 0.85, num_workers: int = 1):
         """
         Initialize model.
@@ -42,11 +48,21 @@ class TopicModel:
 
         :param num_workers: Number of worker to use for preprocessing and training.
         """
+        nltk.download('punkt')
+
         self.pos_to_use = pos_to_use
         self.num_workers = num_workers
 
         self.min_df = min_df
         self.max_df = max_df
+
+        self.stop_words = stop_words
+
+        self.vectorizer = TfidfVectorizer(stop_words=stop_words, max_df=self.max_df)
+
+        self.bigram_model: Optional[Phraser] = None
+        self.trigram_model: Optional[Phraser] = None
+        self.id2word: Optional[Dict] = None
 
     @staticmethod
     def _init_pool():
@@ -105,9 +121,115 @@ class TopicModel:
             if document != '':
                 yield document
 
-    def fit(self, documents: Sequence[str]):
-        """Fit model."""
-        raise NotImplementedError
+    def tokenize(self, document: str) -> List[str]:
+        """
+        Tokenize a document.
+
+        Uses NLTK word tokenizer.
+        """
+        tokens = word_tokenize(document)
+        return [
+            token for token in tokens if token not in self.stop_words
+        ]
+
+    def create_trigrams(self, tokens: List[str]):
+        """
+        Create trigrams.
+
+        :param tokens: list of tokens.
+        :returns: n-gram where n is between 1-3.
+        """
+        if self.trigram_model and self.bigram_model:
+            return self.trigram_model[self.bigram_model[tokens]]
+
+        raise ValueError('trigram model is not fitted yet!')
+
+    def build_vocab(self, documents_tokens: List[List[str]]) -> Tuple[List[List[str]], Dict]:
+        """
+        Build vocabualry.
+
+        :param documents_tokens: documents as list of tokens, e.g. [
+            ['the', 'brown', 'fox'],
+            ['another', 'word', ..],
+            ...
+        ]
+
+        :returns: a tuple consisting of list of documents as word counts (Bag-of-words), 
+        and Id2Word dictionary.
+        """
+        bigram = Phrases(documents_tokens,
+                         min_count=self.min_df,
+                         threshold=100,
+                         progress_per=100,
+                         common_terms=self.stop_words)
+
+        self.bigram_model = Phraser(bigram)
+        self.trigram_model = Phraser(
+            Phrases(bigram[documents_tokens], threshold=100)
+        )
+
+        documents_trigrams = []
+
+        for index in range(len(documents_tokens) - 1, -1, -1):
+            documents_trigrams.append(
+                self.create_trigrams(documents_tokens[index])
+            )
+            documents_tokens.pop()
+
+        id2word = Dictionary(documents_trigrams)
+        return [id2word.doc2bow(text) for text in documents_trigrams], id2word
+
+    def fit(self, documents: Sequence[str], passes: int, random_state: int, num_topics: int, chunksize: int = 1000):
+        """
+        Fit model.
+
+        :param documents: documents to fit the model on.
+        :param passes: number of passes over the training dataset, 1 is enough if dataset is large.
+        :param random_state: random state seed for reproducibility.
+        :param num_topics: number of topics.
+        :param chunksize: number of document to use per update.
+        """
+        self.vectorizer = self.vectorizer.fit(documents)
+        self.stop_words |= self.vectorizer.stop_words_
+
+        corpus, self.id2word = self.build_vocab(
+            [self.tokenize(x) for x in documents]
+        )
+
+        self._lda_model = LdaMulticore(corpus=corpus,
+                                       id2word=self.id2word,
+                                       num_topics=num_topics,
+                                       random_state=random_state,
+                                       chunksize=chunksize,
+                                       passes=passes,
+                                       per_word_topics=True, workers=self.num_workers, )
+
+        self.topics = self._lda_model.print_topics(num_topics=num_topics, num_words=100)
+
+    def predict(self, document, topics_map: Dict[int, str]) -> List[str]:
+        """
+        Predict topics distribution for a document.
+
+        :params document: document to predict topics for.
+        :returns: a list of topic numbers sorted by their probabilities.
+        """
+        tokens = (seq([document])
+                  .map(self.preprocess_document)
+                  .map(self.tokenize)
+                  .map(self.create_trigrams)
+                  .flat_map(self.id2word.doc2bow)
+                  )
+
+        topics = (
+            seq(self._lda_model[tokens][0])
+            .sorted(key=lambda x: -x[1])
+            .map(get(0))
+        )
+
+        if topics_map:
+            topics = topics.map(lambda topic: topics_map[topic])
+
+        return topics.to_list()
 
 
 class CategoryModel:
