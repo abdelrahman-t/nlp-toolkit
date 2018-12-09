@@ -19,6 +19,8 @@ from .utils import _preprocess_arabic_text, setup_logger
 
 LOGGER = setup_logger('topic-models', logging.DEBUG)
 
+nltk.download('punkt')
+
 
 class TopicModel:
     """
@@ -48,8 +50,6 @@ class TopicModel:
 
         :param num_workers: Number of worker to use for preprocessing and training.
         """
-        nltk.download('punkt')
-
         self.pos_to_use = pos_to_use
         self.num_workers = num_workers
 
