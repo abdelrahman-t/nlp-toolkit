@@ -82,7 +82,12 @@ class Farasa:
         Filter parts of speech.
 
         :param text: text to process.
-        :param keep: list of parts of speech to keep.
+        :param keep: list of parts of speech to keep
+
+        SEGMENT_TYPES = ['S', 'E',
+                         'V', 'NOUN', 'PRON', 'ADJ', 'NUM',
+                         'CONJ', 'PART', 'NSUFF', 'CASE', 'FOREIGN',
+                         'DET', 'PREP', 'ABBREV', 'PUNC'].
 
         :returns: filtered text.
         """
