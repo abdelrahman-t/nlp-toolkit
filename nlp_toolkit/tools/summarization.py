@@ -2,8 +2,8 @@
 import logging
 from typing import List
 
-from summa.keywords import keywords
-from summa.summarizer import summarize as _summarize
+from gensim.summarization import keywords
+from gensim.summarization.summarizer import summarize as _summarize
 
 from .farasa import Farasa
 from .utils import _preprocess_arabic_text, setup_logger
