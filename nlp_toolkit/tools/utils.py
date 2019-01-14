@@ -1,9 +1,13 @@
-"""Utils"""
+"""Utils."""
 import logging
+import os.path
 import re
 import string
+from typing import List
 
 import wrapt
+
+FILE_PATH = os.path.dirname(__file__)
 
 RE_WHITESPACE = r'\s+'
 
@@ -35,6 +39,8 @@ LONGATION = re.compile(r'(.)\1+')
 TASHKEEL = re.compile(r'[\u0617-\u061A\u064B-\u0652]')
 
 TRANSLATE_TABLE = dict((ord(char), None) for char in string.punctuation)
+
+ASSETS_DIR = f'{FILE_PATH}/../assets/'
 
 
 def remove_extra_spaces(text: str) -> str:
@@ -160,3 +166,14 @@ def setup_logger(name: str, level) -> logging.Logger:
     logger.addHandler(stream_handler)
 
     return logger
+
+
+def load_stop_words(filename: str) -> List[str]:
+    """
+    Load stop words.
+
+    stopwords inside {filename}.txt are expected to be new-line-sparated.
+    """
+    path = os.path.join(ASSETS_DIR, f'{filename}.txt')
+
+    return open(path).read().split('\n')

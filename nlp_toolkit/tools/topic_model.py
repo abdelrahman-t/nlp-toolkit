@@ -1,9 +1,10 @@
 """Topic modeling."""
 import logging
 from collections import Counter
-from operator import itemgetter as get
 from multiprocessing import Pool
-from typing import Any, Dict, Generator, List, Sequence, Set, Tuple, Union, Optional
+from operator import itemgetter as get
+from typing import (Any, Dict, Generator, Iterable, List, Optional, Sequence,
+                    Set, Tuple, Union)
 
 import nltk
 from functional import seq
@@ -107,6 +108,7 @@ class TopicModel:
         results = []
         pool = Pool(self.num_workers, initializer=self._init_pool)
 
+        LOGGER.info('Preprocessing documents..')
         for document in documents:
             result = pool.apply_async(
                 self._unit_of_work,
@@ -121,6 +123,8 @@ class TopicModel:
             if document != '':
                 yield document
 
+        LOGGER.info('Preprocessing is done.')
+
     def tokenize(self, document: str) -> List[str]:
         """
         Tokenize a document.
@@ -132,7 +136,7 @@ class TopicModel:
             token for token in tokens if token not in self.stop_words
         ]
 
-    def create_trigrams(self, tokens: List[str]):
+    def create_trigrams(self, tokens: List[str]) -> List[str]:
         """
         Create trigrams.
 
@@ -154,9 +158,10 @@ class TopicModel:
             ...
         ]
 
-        :returns: a tuple consisting of list of documents as word counts (Bag-of-words), 
+        :returns: a tuple consisting of list of documents as word counts (Bag-of-words),
         and Id2Word dictionary.
         """
+        LOGGER.info('Fitting bigram model..')
         bigram = Phrases(documents_tokens,
                          min_count=self.min_df,
                          threshold=100,
@@ -164,12 +169,15 @@ class TopicModel:
                          common_terms=self.stop_words)
 
         self.bigram_model = Phraser(bigram)
+
+        LOGGER.info('Fitting trigram model..')
         self.trigram_model = Phraser(
             Phrases(bigram[documents_tokens], threshold=100)
         )
 
         documents_trigrams = []
 
+        LOGGER.info('Creating trigrams..')
         for index in range(len(documents_tokens) - 1, -1, -1):
             documents_trigrams.append(
                 self.create_trigrams(documents_tokens[index])
@@ -179,11 +187,13 @@ class TopicModel:
         id2word = Dictionary(documents_trigrams)
         return [id2word.doc2bow(text) for text in documents_trigrams], id2word
 
-    def fit(self, documents: Sequence[str], passes: int, random_state: int, num_topics: int, chunksize: int = 1000):
+    def fit(self, documents: Sequence[str], preprocess: bool, passes: int, random_state: int, num_topics: int,
+            chunksize: int = 1000):
         """
         Fit model.
 
         :param documents: documents to fit the model on.
+        :param preprocess: whether to preprocess documens before training the model.
         :param passes: number of passes over the training dataset, 1 is enough if dataset is large.
         :param random_state: random state seed for reproducibility.
         :param num_topics: number of topics.
@@ -192,10 +202,14 @@ class TopicModel:
         self.vectorizer = self.vectorizer.fit(documents)
         self.stop_words |= self.vectorizer.stop_words_
 
+        documents_iter: Iterable = documents if not preprocess else self.preprocess_documents(documents)
+
+        LOGGER.info('Building vocab..')
         corpus, self.id2word = self.build_vocab(
-            [self.tokenize(x) for x in documents]
+            [self.tokenize(x) for x in documents_iter]
         )
 
+        LOGGER.info('Fitting lda..')
         self._lda_model = LdaMulticore(corpus=corpus,
                                        id2word=self.id2word,
                                        num_topics=num_topics,
@@ -219,7 +233,7 @@ class TopicModel:
                   .map(self.preprocess_document)
                   .map(self.tokenize)
                   .map(self.create_trigrams)
-                  .flat_map(self.id2word.doc2bow)
+                  .flat_map(self.id2word.doc2bow)  # type: ignore
                   .to_list()
                   )
 

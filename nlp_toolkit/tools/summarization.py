@@ -2,7 +2,6 @@
 import logging
 from typing import List, Tuple
 
-from fuzzywuzzy import process
 from gensim.summarization import keywords as _extract_keywords
 from gensim.summarization.summarizer import summarize as _summarize
 
@@ -37,10 +36,17 @@ def extract_keywords(text: str, pos_filter: List[str], top_n: int = None) -> Lis
     """Extract list of keywords from text."""
     text = _preprocess_arabic_text(text, remove_emails_urls_html=True)
 
-    return _extract_keywords(
-        farasa.filter_pos(text, keep=pos_filter),
-        split=True
-    )[:top_n]
+    try:
+        keywords = _extract_keywords(
+            farasa.filter_pos(text, keep=pos_filter),
+            split=True
+        )
+
+        return keywords[:top_n]
+
+    except Exception as e:
+        LOGGER.exception(e)
+        return []
 
 
 def extract_entities(text: str) -> List[Tuple[str, str]]:
@@ -50,5 +56,10 @@ def extract_entities(text: str) -> List[Tuple[str, str]]:
     :param text: text to extract entities from.
     :returns: list of (entity, entity_type) pairs, e.g. [('egypt', 'LOC')]
     """
-    text = _preprocess_arabic_text(text, remove_emails_urls_html=True)
-    return farasa.get_named_entities(text)
+    try:
+        text = _preprocess_arabic_text(text, remove_emails_urls_html=True)
+        return farasa.get_named_entities(text)
+
+    except Exception as e:
+        LOGGER.exception(e)
+        return []
