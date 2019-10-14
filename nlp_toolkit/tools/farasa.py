@@ -5,30 +5,25 @@ Farasa is developed at QCRI and can be found at http://qatsdemo.cloudapp.net/far
 Paper can be found at http://www.aclweb.org/anthology/N16-3003
 """
 import logging
-import os.path
 from collections import defaultdict
-from operator import itemgetter
-from typing import Dict, List, Tuple
+from operator import concat, itemgetter
+from threading import RLock
+from typing import Dict, List, Optional, Tuple
 
 from functional import seq
 from py4j.java_gateway import GatewayParameters, JavaGateway, launch_gateway
 
-from .utils import preprorcess_arabic_text, setup_logger
+import nlp_toolkit.dependencies as dependencies
+
+from .utils import break_input_into_chuncks, setup_logger
 
 LOGGER = setup_logger('farasa', logging.INFO)
 
-FILE_PATH = os.path.dirname(__file__)
 FARASA_JARS = [
-    os.path.join(FILE_PATH, '../dependencies/farasa/NER/NER.jar'),
-    os.path.join(FILE_PATH, '../dependencies/farasa/POS/POS.jar'),
+    dependencies.get_language_model_path('ner'),
+    dependencies.get_language_model_path('pos'),
+    dependencies.get_language_model_path('diacritizer')
 ]
-
-CACHE_SIZE = 100
-
-if not seq(FARASA_JARS).map(os.path.isfile).all():
-    raise FileNotFoundError(
-        'could not locate Farasa .jar files, %s are required' % FARASA_JARS
-    )
 
 CLASS_PATH = ':'.join(FARASA_JARS)
 
@@ -41,24 +36,54 @@ class Farasa:
     """
 
     SEGMENT_TYPES = ['S', 'E',
-                     'V', 'NOUN', 'PRON', 'ADJ', 'NUM',
+                     'V', 'NOUN', 'ADJ', 'NUM',
                      'CONJ', 'PART', 'NSUFF', 'CASE', 'FOREIGN',
                      'DET', 'PREP', 'ABBREV', 'PUNC']
 
     NER_TOKEN_TYPES = ['B-LOC', 'B-ORG', 'B-PERS',
                        'I-LOC', 'I-ORG', 'I-PERS']
 
-    def __init__(self) -> None:
-        """Initialize Farasa."""
-        self.gateway = self.__launch_java_gateway()
+    __instance: Optional['Farasa'] = None
+    __global_lock: RLock = RLock()
 
-        base = self.gateway.jvm.com.qcri.farasa
+    def __new__(cls, singelton: bool) -> 'Farasa':
+        """
+        Create a Farasa instance.
 
-        self.segmenter = base.segmenter.Farasa()
-        self.pos_tagger = base.pos.FarasaPOSTagger(self.segmenter)
-        self.ner = base.ner.ArabicNER(self.segmenter, self.pos_tagger)
+        :param singelton: whether to create a single shared instance of Farasa.
+        """
+        if singelton:
+            with cls.__global_lock:
+                return cls.__instance or super(Farasa, cls).__new__(cls)  # type: ignore
 
-    @preprorcess_arabic_text()
+        return super(Farasa, cls).__new__(cls)  # type: ignore
+
+    def __init__(self, singelton: bool = True) -> None:
+        """
+        Initialize Farasa.
+
+        :param singelton: whether to create a single shared instance of Farasa.
+        """
+        if not self.__class__.__instance or not singelton:
+            self.gateway = self.__launch_java_gateway()
+
+            base = self.gateway.jvm.com.qcri.farasa
+
+            self.segmenter = base.segmenter.Farasa()
+            self.pos_tagger = base.pos.FarasaPOSTagger(self.segmenter)
+            self.ner = base.ner.ArabicNER(self.segmenter, self.pos_tagger)
+            self.diacritizer = base.diacritize.DiacritizeText(self.segmenter, self.pos_tagger)
+
+            if singelton:
+                self.__class__.__instance = self
+                self.__lock = self.__global_lock
+
+            else:
+                self.__lock = RLock()
+
+            self.is_singelton = singelton
+
+    @break_input_into_chuncks(concat=concat)
     def tag_pos(self, text: str) -> List[Tuple[str, str]]:
         """
         Tag part of speech.
@@ -67,6 +92,8 @@ class Farasa:
 
         :returns: List of (token, token_type) pairs.
         """
+        text = text.replace(';', ' ')  # to handle a bug in FARASA.
+
         result = []
 
         segments = self.segment(text)
@@ -77,12 +104,30 @@ class Farasa:
 
         return result
 
-    def filter_pos(self, text: str, keep: List[str]) -> str:
+    def merge_iffix(self, tags):
+        """Merge iffix."""
+        length = len(tags)
+
+        for i in range(length):
+            word, pos = tags[i]
+
+            if word.startswith('+'):
+                tags[i-1] = (tags[i-1][0] + word.replace('+', ''),
+                             tags[i-1][1])
+
+            elif word.endswith('+'):
+                tags[i+1] = (word.replace('+', '') + tags[i+1][0],
+                             tags[i+1][1])
+
+        return tags
+
+    @break_input_into_chuncks(concat=lambda x, y: x + ' ' + y)
+    def filter_pos(self, text: str, parts_of_speech_to_keep: List[str]) -> str:
         """
-        Filter parts of speech.
+        Break text into chuncks and then calls _filter_pos.
 
         :param text: text to process.
-        :param keep: list of parts of speech to keep
+        :param parts_of_speech_to_keep: list of parts of speech to keep
 
         SEGMENT_TYPES = ['S', 'E',
                          'V', 'NOUN', 'PRON', 'ADJ', 'NUM',
@@ -91,13 +136,27 @@ class Farasa:
 
         :returns: filtered text.
         """
-        pos = self.tag_pos(text)
+        if 'VERB' in parts_of_speech_to_keep:
+            parts_of_speech_to_keep = parts_of_speech_to_keep + ['V']
+
+        pos = self.merge_iffix(self.tag_pos(text))
         return ' '.join(seq(pos)
-                        .filter(lambda x: x[1] in keep and '+' not in x[1])
+                        .filter(lambda x: x[1] in parts_of_speech_to_keep and '+' not in x[0])
                         .map(itemgetter(0))
                         )
 
-    @preprorcess_arabic_text()
+    @break_input_into_chuncks(concat=concat)
+    def lemmetize(self, text: str) -> str:
+        """
+        Lemmetize text.
+
+        :param text: text to process.
+        """
+        text = text.replace(';', ' ')  # to handle a bug in FARASA.
+
+        return ' '.join(self.segmenter.lemmatizeLine(text))
+
+    @break_input_into_chuncks(concat=concat)
     def segment(self, text: str) -> List[str]:
         """
         Segment piece of text.
@@ -106,17 +165,22 @@ class Farasa:
 
         :returns: Unaltered Farasa segmenter output.
         """
+        text = text.replace(';', ' ')  # to handle a bug in FARASA.
+
         return self.segmenter.segmentLine(text)
 
-    @preprorcess_arabic_text()
-    def get_named_entities(self, text: str) -> List[Tuple[str, str]]:
+    @break_input_into_chuncks(concat=concat)
+    def _get_named_entities(self, text: str, lemmatize: bool) -> List[Tuple[str, str]]:
         """
         Get named entities.
 
         :param text: text to process.
+        :param lemmatize: whether to lemmatize results.
 
         :returns: List of (token, token_type) pairs.
         """
+        text = text.replace(';', ' ')  # to handle a bug in FARASA.
+
         tokens = (seq(self.ner.tagLine(text))
                   .map(lambda token: token.split('/'))
                   .filter(lambda token: token[1] in self.NER_TOKEN_TYPES)
@@ -138,15 +202,41 @@ class Farasa:
 
         # Return NE as a name and type pairs, i.e. ('Egypt', 'LOC').
         for key in sorted(result.keys(), key=lambda value: value[0]):
+            entity = ' '.join(result[key])
+
+            if lemmatize:
+                entity = self.lemmetize(entity)
+
             entities.append(
-                (' '.join(result[key]), key[1])
+                (entity, key[1])
             )
 
-        # Keep distinct NE ONLY.
-        return seq(entities).distinct().to_list()
+        return seq(entities).to_list()
 
-    @staticmethod
-    def __launch_java_gateway() -> JavaGateway:
+    def get_named_entities(self, text: str, lemmatize: bool = False) -> List[Tuple[str, str]]:
+        """
+        Wrap _get_named_entities.
+
+        :param text: text to process.
+        :param lemmatize: whether to lemmatize results.
+
+        :returns: List of (token, token_type) pairs.
+        """
+        return seq(self._get_named_entities(text, lemmatize=lemmatize)).to_list()
+
+    @break_input_into_chuncks(concat=lambda x, y: x + ' ' + y)
+    def diacritize(self, text: str, keep_original_diacritics: bool = False) -> str:
+        """
+        Diacritize.
+
+        :param text: text to process.
+        :param keep_original_diacritics: whether to keep original diacritics.
+        """
+        raise NotImplementedError('This feature is currently disabled')
+        return self.diacritizer.diacritize(text, keep_original_diacritics)
+
+    @classmethod
+    def __launch_java_gateway(cls) -> JavaGateway:
         """Launch java gateway."""
         LOGGER.info('Initializing Farasa..')
 
